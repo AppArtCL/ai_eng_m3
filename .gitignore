@@ -1,0 +1,5 @@
+# Entorno y credenciales
+.env
+
+# Índice vectorial generado (no forma parte del código fuente)
+vectorstore/
