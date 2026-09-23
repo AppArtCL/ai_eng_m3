@@ -6,13 +6,12 @@ Sistema RAG que responde preguntas sobre el Reglamento de Copropiedad de un edif
 1. **Ingesta**: `DirectoryLoader` carga los `.txt` de `data/` y `RecursiveCharacterTextSplitter`
    (con encoder de `tiktoken`) los fragmenta en chunks de **500 tokens con 50 de overlap**,
    usando separadores propios del documento (`\n⚬`, `\n\t`, `\n\n`, `\n`, `. `) para que
-   cada norma empiece un chunk en vez de quedar como cola de otro tema. Ver *Decisiones de
-   diseño* más abajo.
+   cada norma empiece un chunk en vez de quedar como cola de otro tema. 
 2. **Embeddings + persistencia**: los chunks se embeben con `HuggingFaceEmbeddings`
    (`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`, multilingüe: el corpus está
    en español) y se guardan en una colección de **ChromaDB** persistente. El índice se
    reutiliza entre ejecuciones y solo se reconstruye si cambiaron los documentos o la
-   configuración de indexado (ver *Decisiones de diseño*).
+   configuración de indexado.
 3. **Retriever**: búsqueda por similitud (`k=4`) sobre la colección de Chroma.
 4. **Generación grounded (LCEL)**: una única cadena que compone
    `RunnableParallel(retriever, pregunta) | formateo de documentos | prompt | ChatOpenAI |
