@@ -10,7 +10,9 @@ Sistema RAG que responde preguntas sobre el Reglamento de Copropiedad de un edif
    diseño* más abajo.
 2. **Embeddings + persistencia**: los chunks se embeben con `HuggingFaceEmbeddings`
    (`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`, multilingüe: el corpus está
-   en español) y se guardan en una colección de **ChromaDB** persistente.
+   en español) y se guardan en una colección de **ChromaDB** persistente. El índice se
+   reutiliza entre ejecuciones y solo se reconstruye si cambiaron los documentos o la
+   configuración de indexado (ver *Decisiones de diseño*).
 3. **Retriever**: búsqueda por similitud (`k=4`) sobre la colección de Chroma.
 4. **Generación grounded (LCEL)**: una única cadena que compone
    `RunnableParallel(retriever, pregunta) | formateo de documentos | prompt | ChatOpenAI |
@@ -87,6 +89,35 @@ entre 0.366 y 0.390 para *todos* los fragmentos: el modelo no discriminaba. Con
 
 Se usa el **mismo modelo para indexar y para consultar**. Si se cambia el modelo o el chunking
 hay que reconstruir el índice: los vectores viejos no son comparables con los nuevos.
+
+### Reutilización del índice
+
+Re-embeber los documentos en cada ejecución es lento e innecesario, pero reutilizar un índice
+obsoleto es peor: devuelve resultados incoherentes en silencio. `indice_desactualizado()`
+decide comparando una **huella** guardada en `vectorstore/index_meta.json` contra la actual:
+
+```json
+{
+  "datos": "<sha256 del nombre + contenido de cada data/*.txt>",
+  "modelo_embeddings": "...",
+  "chunk_size": 500,
+  "chunk_overlap": 50,
+  "separators": ["\n⚬", "\n\t", "\n\n", "\n", ". ", " "]
+}
+```
+
+La huella cubre el contenido **y** la configuración, en vez de mirar fechas de modificación:
+
+| Situación | `mtime` | Huella |
+|---|---|---|
+| Se editó un documento | reconstruye | reconstruye |
+| `git clone` / `cp` (mtime nuevo, contenido igual) | reconstruye de más | reutiliza |
+| Cambió `EMBEDDING_MODEL` o `chunk_size` | **no detecta** | reconstruye |
+| Falta el metadato o está corrupto | — | reconstruye |
+
+El tercer caso es el importante: cambiar el modelo de embeddings no toca ningún archivo de
+`data/`, pero invalida todos los vectores. Con `mtime` el índice viejo se reutiliza y se
+terminan comparando vectores de dos modelos distintos.
 
 ## Notas
 
