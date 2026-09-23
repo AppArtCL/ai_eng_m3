@@ -63,62 +63,6 @@ requirements.txt     # dependencias con versiones fijas
 vectorstore/         # índice de Chroma generado localmente 
 ```
 
-## Decisiones de diseño
-
-### Separadores explícitos en el splitter
-
-Partir el reglamento solo por tamaño dejaba normas cortas como cola de un chunk cuyo tema
-dominante era otro. Un embedding es un único vector que promedia todo el chunk, así que esa
-norma quedaba representada por el tema equivocado y era irrecuperable.
-
-Caso medido — consulta *"¿Puedo tender ropa en el balcón?"*, cuya respuesta está en
-`data/asados.txt`:
-
-| Configuración | Posición del chunk correcto | Similitud |
-|---|---|---|
-| 500/50 sin `separators` | 19 de 22 (fuera del `k=4`) | 0.117 |
-| 500/50 con `separators` | **1** | **0.676** |
-
-El tamaño de chunk no era el problema: lo eran los puntos de corte.
-
-### Modelo de embeddings multilingüe
-
-`all-MiniLM-L6-v2` es monolingüe inglés. Sobre este corpus en español los scores se aplastaban
-entre 0.366 y 0.390 para *todos* los fragmentos: el modelo no discriminaba. Con
-`paraphrase-multilingual-MiniLM-L12-v2` el fragmento correcto se separa del resto (0.676 vs 0.313).
-
-Se usa el **mismo modelo para indexar y para consultar**. Si se cambia el modelo o el chunking
-hay que reconstruir el índice: los vectores viejos no son comparables con los nuevos.
-
-### Reutilización del índice
-
-Re-embeber los documentos en cada ejecución es lento e innecesario, pero reutilizar un índice
-obsoleto es peor: devuelve resultados incoherentes en silencio. `indice_desactualizado()`
-decide comparando una **huella** guardada en `vectorstore/index_meta.json` contra la actual:
-
-```json
-{
-  "datos": "<sha256 del nombre + contenido de cada data/*.txt>",
-  "modelo_embeddings": "...",
-  "chunk_size": 500,
-  "chunk_overlap": 50,
-  "separators": ["\n⚬", "\n\t", "\n\n", "\n", ". ", " "]
-}
-```
-
-La huella cubre el contenido **y** la configuración, en vez de mirar fechas de modificación:
-
-| Situación | `mtime` | Huella |
-|---|---|---|
-| Se editó un documento | reconstruye | reconstruye |
-| `git clone` / `cp` (mtime nuevo, contenido igual) | reconstruye de más | reutiliza |
-| Cambió `EMBEDDING_MODEL` o `chunk_size` | **no detecta** | reconstruye |
-| Falta el metadato o está corrupto | — | reconstruye |
-
-El tercer caso es el importante: cambiar el modelo de embeddings no toca ningún archivo de
-`data/`, pero invalida todos los vectores. Con `mtime` el índice viejo se reutiliza y se
-terminan comparando vectores de dos modelos distintos.
-
 ## Notas
 
 El script de ingesta está incluido en una celda del notebook principal para tener todo el
